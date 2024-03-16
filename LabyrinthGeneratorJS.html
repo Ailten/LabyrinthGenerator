@@ -256,79 +256,109 @@ while(isStayOnLoop){
 
 }
 `,`
-let startY = 1; //choose a room to start.
-let startX = 1;
-let endY = grid.length -2; //choose a room to end.
-let endX = grid[0].length -2;
+let startCell = { //choose a room to start.
+	parent: null,
+	pos: {x: 1, y: 1},
+	g: 0, h: 0, f: 0,
+};
+let endCell = { //choose a room to end.
+	parent: null,
+	pos: {x: grid[0].length-2, y: grid.length-2},
+	g: 0, h: 0, f: 0,
+};
 
-let walkerLeftY = startY; //set two walker at room start.
-let walkerLeftX = startX;
-let walkerRightY = startY;
-let walkerRightX = startX;
+let openList = [startCell]; //build list 
+let closedList = [];
 
-let cellAdjacent = [ //array of cell adjacent (in clockwise direction).
-	{x:  0, y: -1},
-	{x:  1, y:  0},
-	{x:  0, y:  1},
-	{x: -1, y:  0}
-];
-let lastDirectionLeft = 1; //last index direction take.
-let lastDirectionRight = 2;
+let pathFind = [];
+while(openList.length > 0){ //loop until openList was empty.
 
-for(let y=0; y<grid.length; y++){ //reset id of all cell.
-	for(let x=0; x<grid[0].length; x++){
-		if(grid[y][x].type == 'room' || grid[y][x].type == 'path')
-			grid[y][x].idRng = 0;
+	let currentCell = openList[0]; //find the lowest f score.
+	let currentIndex = 0;
+	for(let index=0; index<openList.length; index++){
+		let item = openList[index];
+		if(item.f < currentCell.f){
+			currentCell = item;
+			currentIndex = index;
+		}
 	}
+	
+	openList.splice(currentIndex, 1); //pop/push the find cell.
+	closedList.push(currentCell);
+	
+	if(currentCell.pos.x == endCell.pos.x && currentCell.pos.y == endCell.pos.y){
+		pathFind = [];
+		let current = currentCell;
+		while(current != null){
+			pathFind.push(current.pos);
+			current = current.parent;
+		}
+		for(let i=0; i<Math.floor(pathFind.length/2); i++){ //reverce path.
+			let swipCellPath = pathFind[i];
+			pathFind[i] = pathFind[pathFind.length-1-i];
+			pathFind[pathFind.length-1-i] = swipCellPath;
+		}
+		break;
+	}
+	
+	let children = [];
+	let adjacentCell = [{x:0, y:-1}, {x:1, y:0}, {x:0, y:1}, {x:-1, y:0}];
+	for(let i=0; i<adjacentCell.length; i++){
+		let newPos = adjacentCell[i];
+		let cellPos = {x: currentCell.pos.x + newPos.x, y: currentCell.pos.y + newPos.y};
+		
+		if(cellPos.x < 1 || cellPos.x > grid[0].length-2 || //skip if out of range.
+			cellPos.y < 1 || cellPos.y > grid[0].length-2) //border.
+			continue;
+			
+		let getCell = grid[cellPos.y][cellPos.x];
+		if(getCell.type == 'wall' || getCell.type == 'center') //skip cell block.
+			continue;
+		
+		children.push({ //push in children.
+			parent: currentCell,
+			pos: cellPos,
+			g: 0, h: 0, f: 0,
+		});
+			
+	}
+	
+	for(let i=0; i<children.length; i++){
+		let child = children[i];
+		
+		let findMatchContinue = false;
+		for(let j=0; j<closedList.length; j++){
+			let closedChild = closedList[j];
+			if(child.pos.x === closedChild.pos.x && child.pos.y === closedChild.pos.y){
+				findMatchContinue = true;
+				continue;
+			}
+		}
+		if(findMatchContinue)
+			continue;
+		
+		child.g = currentCell.g + 1;
+		child.h = Math.pow(child.pos.x - endCell.pos.x, 2) + Math.pow(child.pos.y - endCell.pos.y, 2);
+		child.f = child.g + child.h;
+		
+		for(let j=0; j<openList.length; j++){
+			let openCell = openList[j];
+			if(child.pos.x === openCell.pos.x && child.pos.y === openCell.pos.y && child.g > openCell.g){
+				findMatchContinue = true;
+				continue;
+			}
+		}
+		if(findMatchContinue)
+			continue;
+		
+		openList.push(child);
+		
+	}
+
 }
 
-while(true){ //loop until both walker walk on the end room.
-
-	if(grid[walkerLeftY][walkerLeftX].idRng%2 < 1) //if walker have never walk on.
-		grid[walkerLeftY][walkerLeftX].idRng += 1; //mark walk by walker left.
-	if(grid[walkerRightY][walkerRightX].idRng < 2) //same for walker right.
-		grid[walkerRightY][walkerRightX].idRng += 2; //using value 2^1 for right.
-	
-	if(grid[walkerLeftY][walkerLeftX].idRng == 3) //if mark walk by both walker.
-		grid[walkerLeftY][walkerLeftX].color = 'gold'; //color on gold.
-	if(grid[walkerRightY][walkerRightX].idRng == 3) //same for walker right.
-		grid[walkerRightY][walkerRightX].color = 'gold';
-		
-	if(grid[endY][endX].idRng == 3) //exit the loop.
-		break;
-	
-	if(walkerLeftY != endY || walkerLeftX != endX){ //if walker not at end.
-		let replaceI = lastDirectionLeft -1; //rotate direction base on last.
-		for(let i=0; i<cellAdjacent.length; i++){ //loop until find a walkable.
-			let index = (i + replaceI +cellAdjacent.length) %cellAdjacent.length;
-			let walfLeftDestinationY = walkerLeftY + cellAdjacent[index].y;
-			let walfLeftDestinationX = walkerLeftX + cellAdjacent[index].x;
-			let cellDestination = grid[walfLeftDestinationY][walfLeftDestinationX];
-			if(cellDestination.type == 'room' || cellDestination.type == 'path'){
-				walkerLeftY = walfLeftDestinationY; //apply new pos of walker left.
-				walkerLeftX = walfLeftDestinationX;
-				lastDirectionLeft = index; //update the last direction.
-				break; //find next cell destination of walker left.
-			}
-		}
-	}
-	
-	if(walkerRightY != endY || walkerRightX != endX){ //same for walker right.
-		let replaceI = lastDirectionRight +1; //rotate reverce for right.
-		for(let i=0; i>-cellAdjacent.length; i--){ //loop in reverce order.
-			let index = (i + replaceI +cellAdjacent.length) %cellAdjacent.length;
-			let walfRightDestinationY = walkerRightY + cellAdjacent[index].y;
-			let walfRightDestinationX = walkerRightX + cellAdjacent[index].x;
-			let cellDestination = grid[walfRightDestinationY][walfRightDestinationX];
-			if(cellDestination.type == 'room' || cellDestination.type == 'path'){
-				walkerRightY = walfRightDestinationY;
-				walkerRightX = walfRightDestinationX;
-				lastDirectionRight = index;
-				break;
-			}
-		}
-	}
-	
+for(let i=0; i<pathFind.length; i++){ //apply color on path find.
+	grid[pathFind[i].y][pathFind[i].x].color = 'gold';
 }
 `
 			];
@@ -386,7 +416,7 @@ while(true){ //loop until both walker walk on the end room.
 			</div>
 		</section>
 		<section>
-			<h2>the hanswer</h2>
+			<h2>path finding (A*)</h2>
 			<div class="div-input-section">
 				<input type="button" value="apply" onclick="apply(this)"/>
 			</div>
