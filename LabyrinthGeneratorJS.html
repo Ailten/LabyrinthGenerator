@@ -52,6 +52,9 @@
 				width: -webkit-fill-available;
 				background-color: #9b9b9b;
 				border: none;
+				scrollbar-color: #6e6e6e rgb(0, 0, 0, 0);
+				scrollbar-width: thin;
+				resize: none;
 			}
 			article > textarea:hover,
 			article > textarea:active,
@@ -102,6 +105,9 @@
 					canvas.setAttribute('height', canvasHeight);
 					let c2d = canvas.getContext('2d');
 					drawGrid(c2d, grid);
+					
+					let heightCanvas = canvas.getBoundingClientRect().height; //resize textarea height base on canvas height.
+					textarea.setAttribute('rows', (heightCanvas / 15));
 					
 				}
 				
@@ -159,27 +165,30 @@
 					let canvas = sections[i].getElementsByTagName('canvas')[0]; //re-draw canvas.
 					let c2d = canvas.getContext('2d');
 					drawGrid(c2d, grid);
-					
-					console.log(grid);
 				}
 					
 			}
 			
 			const codeStr = [
 `
-let width = 7; //size of labyrinth we want (rooms).
-let height = 5;
+var Vector = {
+	init: function(x, y) { return {x:x, y:y}; },
+};
 
-let widthNWall = width * 2 + 1; //size of labyrinth (rooms+walls).
-let heightNWall = height * 2 + 1;
+let sizeLabyrinth = Vector.init(7, 5); //size of labyrinth we want (rooms).
+
+let sizeNWall = Vector.init( //size of labyrinth (rooms+walls).
+	sizeLabyrinth.x * 2 + 1,
+	sizeLabyrinth.y * 2 + 1
+);
 
 var grid = []; //array 2D fill (of object).
-for(let y=0; y<heightNWall; y++){
+for(let y=0; y<sizeNWall.y; y++){
 	grid.push([]); //push a new line in row array.
-	for(let x=0; x<widthNWall; x++){
+	for(let x=0; x<sizeNWall.x; x++){
 		if(x%2 != 0 && y%2 != 0) //add room.
 			grid[y].push({type: 'room', color:'white', idRng: null});
-		else if(x%(widthNWall-1) == 0 || y%(heightNWall-1) == 0) //add border.
+		else if(x%(sizeNWall.x-1) == 0 || y%(sizeNWall.y-1) == 0) //add border.
 			grid[y].push({type: 'border', color:'black', idRng: null});
 		else if(x%2 == 0 && y%2 == 0) //add center.
 			grid[y].push({type: 'center', color:'black', idRng: null});
@@ -188,9 +197,7 @@ for(let y=0; y<heightNWall; y++){
 	}
 }
 `,`
-Math.randomNumLowerThan = function(max){
-	return Math.floor(Math.random() * max);
-};
+Math.rng = function(max){ return Math.floor(Math.random() * max) };
 
 let arrayNumberSend = [];
 for(let y=0; y<grid.length; y++){
@@ -200,8 +207,8 @@ for(let y=0; y<grid.length; y++){
 	
 		let randNum;
 		do{ //get a random number not already assigned to a room.
-			randNum = Math.randomNumLowerThan(
-				grid.length * grid[0].length
+			randNum = Math.rng(
+				(grid.length * grid[0].length)-1
 			); //set a bigger range than room count.
 		}while(arrayNumberSend.includes(randNum));
 			
@@ -210,36 +217,35 @@ for(let y=0; y<grid.length; y++){
 	}
 }
 `,`
-let isStayOnLoop = true;
-while(isStayOnLoop){
+while(true){
 
-	let randY = Math.randomNumLowerThan(grid.length); //random cell in grid.
-	let randX = Math.randomNumLowerThan(grid[0].length);
-	if(grid[randY][randX].type != 'wall')
+	let randWall = Vector.init( //random cell in grid.
+		Math.rng(grid[0].length),
+		Math.rng(grid.length)
+	);
+	if(grid[randWall.y][randWall.x].type != 'wall')
 		continue; //skip if not a wall.
 	
-	let roomOneY = randY; //position cell of both room join by the wall.
-	let roomOneX = randX;
-	let roomTwoY = randY;
-	let roomTwoX = randX;
-	if(randX%2 == 0){ //is a vertical wall.
-		roomOneX -= 1;
-		roomTwoX += 1;
+	let roomOne = Vector.init(randWall.x, randWall.y); //pos of both room.
+	let roomTwo = Vector.init(randWall.x, randWall.y); //join by the wall.
+	if(randWall.x%2 == 0){ //is a vertical wall.
+		roomOne.x -= 1;
+		roomTwo.x += 1;
 	}else{ //is an horizontal wall.
-		roomOneY -= 1;
-		roomTwoY += 1;
+		roomOne.y -= 1;
+		roomTwo.y += 1;
 	}
 	
-	let roomOneId = grid[roomOneY][roomOneX].idRng; //get both idRng.
-	let roomTwoId = grid[roomTwoY][roomTwoX].idRng;
+	let roomOneId = grid[roomOne.y][roomOne.x].idRng; //get both idRng.
+	let roomTwoId = grid[roomTwo.y][roomTwo.x].idRng;
 	
 	if(roomOneId == roomTwoId) //if the two room have the same id.
 		continue; //skip, (the two room is already connected).
 		
 	//cast/replace object wall by an object path.
-	grid[randY][randX] = {type: 'path', color:'white', idRng: null};
+	grid[randWall.y][randWall.x] = {type: 'path', color: 'white', idRng: null};
 	
-	isStayOnLoop = false; //default, expect exit the loop.
+	let isStayOnLoop = false; //default, expect exit the loop.
 	for(let y=0; y<grid.length; y++){
 		for(let x=0; x<grid[0].length; x++){
 			if(grid[y][x].type != 'room')
@@ -253,17 +259,19 @@ while(isStayOnLoop){
 			
 		}
 	}
+	if(!isStayOnLoop)
+		break;
 
 }
 `,`
 let startCell = { //choose a room to start.
 	parent: null,
-	pos: {x: 1, y: 1},
+	pos: Vector.init(1, 1),
 	g: 0, h: 0, f: 0,
 };
 let endCell = { //choose a room to end.
 	parent: null,
-	pos: {x: grid[0].length-2, y: grid.length-2},
+	pos: Vector.init(grid[0].length-2, grid.length-2),
 	g: 0, h: 0, f: 0,
 };
 
@@ -298,21 +306,21 @@ while(openList.length > 0){ //loop until openList was empty.
 			pathFind[i] = pathFind[pathFind.length-1-i];
 			pathFind[pathFind.length-1-i] = swipCellPath;
 		}
-		break;
+		break; //exit loop while (return success).
 	}
 	
 	let children = [];
-	let adjacentCell = [{x:0, y:-1}, {x:1, y:0}, {x:0, y:1}, {x:-1, y:0}];
+	let adjacentCell = [Vector.init(0, -1), Vector.init(1, 0), Vector.init(0, 1), Vector.init(-1, 0)];
 	for(let i=0; i<adjacentCell.length; i++){
 		let newPos = adjacentCell[i];
-		let cellPos = {x: currentCell.pos.x + newPos.x, y: currentCell.pos.y + newPos.y};
+		let cellPos = Vector.init(currentCell.pos.x + newPos.x, currentCell.pos.y + newPos.y);
 		
-		if(cellPos.x < 1 || cellPos.x > grid[0].length-2 || //skip if out of range.
-			cellPos.y < 1 || cellPos.y > grid[0].length-2) //border.
+		if(cellPos.x < 0 || cellPos.x > grid[0].length-1 || //skip if out of range.
+			cellPos.y < 0 || cellPos.y > grid[0].length-1)
 			continue;
 			
 		let getCell = grid[cellPos.y][cellPos.x];
-		if(getCell.type == 'wall' || getCell.type == 'center') //skip cell block.
+		if(getCell.type == 'border' || getCell.type == 'wall' || getCell.type == 'center') //skip cell block.
 			continue;
 		
 		children.push({ //push in children.
