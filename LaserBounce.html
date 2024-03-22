@@ -259,8 +259,8 @@ lasers.push(Vector.initLine( //cast laser in line (pos start/end).
 	'red' //color of laser.
 ));
 `,`
-Vector.rotateAVector = function(vect, rotateAngle){
-	let rotateEuler = (rotateAngle * Math.PI/180); //cast.
+Vector.rotateAVector = function(vect, rotateDegree){
+	let rotateEuler = ((rotateDegree /180) *Math.PI); //cast.
 	return Vector.init( //rotate.
         Math.cos(rotateEuler) * vect.x + (-Math.sin(rotateEuler)) * vect.y,
         Math.sin(rotateEuler) * vect.x + Math.cos(rotateEuler) * vect.y
@@ -383,15 +383,25 @@ for(let i=0; i<walls.length; i++){ //loop on every wall.
 `,`
 Vector.atan = function(vec){
 	let out = Math.atan2(vec.x, vec.y);
-	out /= Math.PI;
-	out = (out + 1) /2;
-	return out * 360;
-}
+	return (out /Math.PI) *180;
+};
+Vector.normalize = function(vec){
+	let dist = Math.sqrt(
+		Math.pow(vec.x, 2) + 
+		Math.pow(vec.y, 2)
+	);
+	if(dist == 0)
+		return null;
+	return Vector.init(
+		vec.x * (1/dist),
+		vec.y * (1/dist),
+	);
+};
 
 collideFound = null; //not draw first inters.
 
 let laserLength = laser.length;
-let laserDirection = laser.direction;
+let laserDirection = Vector.normalize(laser.direction);
 
 for(let l=0; l<lasers.length; l++){ //loop on array lasers.
 
@@ -435,15 +445,23 @@ for(let l=0; l<lasers.length; l++){ //loop on array lasers.
 		
 		laserLength -= distToFind; //new laser length.
 		
-		let angleBase = Vector.atan(laserDirection); //new direction (bounce).
-		let angleCole = Vector.atan(
-			Vector.init(
-				wallFind.posEnd.x - wallFind.posStart.x,
-				wallFind.posEnd.y - wallFind.posStart.y
-			)
+		let wallDirection = Vector.init( //direction wall (normalized).
+			wallFind.posEnd.x - wallFind.posStart.x,
+			wallFind.posEnd.y - wallFind.posStart.y
 		);
-		let angleBounce = (angleBase - angleCole) *2;
-		laserDirection = Vector.rotateAVector(laserDirection, angleBounce);
+		wallDirection = Vector.normalize(wallDirection);
+		
+		let dotProduct = ( //find direction of bounce.
+			laserDirection.x * wallDirection.x + 
+			laserDirection.y * wallDirection.y
+		);
+		let bounceDirection = Vector.init(
+			laserDirection.x - (2 * dotProduct * wallDirection.x),
+			laserDirection.y - (2 * dotProduct * wallDirection.y)
+		);
+		bounceDirection.x *= -1;
+		bounceDirection.y *= -1;
+		laserDirection = Vector.normalize(bounceDirection);
 		
 		lasers.push(Vector.initLine( //set bounce of last laser.
 			closestColideFind,
