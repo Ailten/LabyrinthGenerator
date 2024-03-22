@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Laser Bounce (JS)</title>
+		<meta charset="UTF-8"/>
+		<style>
+			body{
+				margin: 0;
+				background-color: grey;
+			}
+			h1, h2, h3 {
+				text-align: center;
+				margin: 6px 0;
+			}
+			
+			.flex-container {
+				display: flex;
+			}
+			.flex-container > * {
+				flex: 1;
+			}
+			
+			section {
+				border-top: 1px solid #000;
+			}
+			
+			section article {
+				width: 50%;
+				align: inline-block;
+			}
+			section article:nth-child(n+2) {
+				border-left: 1px solid #000;
+			}
+			
+			.div-input-section {
+				position: absolute;
+				width: 100%;
+				text-align: center;
+				padding-top: 6px;
+			}
+			.div-input-section > input {
+				background-color: #9b9b9b;
+				border: 1px solid black;
+			}
+			.div-input-section > input:hover,
+			.div-input-section > input:active {
+				background-color: #c0c0c0;
+				border: 1px solid white;
+			}
+			
+			article > textarea {
+				width: -webkit-fill-available;
+				background-color: #9b9b9b;
+				border: none;
+				scrollbar-color: #6e6e6e rgb(0, 0, 0, 0);
+				scrollbar-width: thin;
+				resize: none;
+			}
+			article > textarea:hover,
+			article > textarea:active,
+			article > textarea:focus {
+				outline: none;
+				background-color: #c0c0c0;
+			}
+			
+			article > canvas {
+				width: -webkit-fill-available;
+				background-color: #6e6e6e;
+			}
+			
+		</style>
+		<script>
+		
+			const canvasWidth = 1280; //resolution canvas.
+			const canvasHeight = 720;
+			
+			const updateMilisec = 100; //miliseconde between two update.
+		
+			window.addEventListener('load', function(){
+				doUpdate(true);
+				
+				setInterval(function(){
+					doUpdate(false);
+				}, updateMilisec);
+			});
+			
+			function doUpdate(firstCall=false){
+			
+				let sections = document.getElementsByTagName('section'); //load data for all sections.
+				for(let s=0; s<sections.length; s++){
+				
+					let autoUpdate = sections[s].hasAttribute('data-auto-update'); //check attribute auto update.
+					//if(!firstCall && !autoUpdate)
+					//	continue; //skip if not first call and not auto update.
+						
+					let code;
+					let textarea = sections[s].getElementsByTagName('textarea')[0];
+					
+					if(firstCall){
+					
+						let titleSection = sections[s].getElementsByTagName('h2')[0]; //adapt title section.
+						titleSection.innerText = 'step '+ (s+1) +' : ' + titleSection.innerText;
+						
+						let input = sections[s].getElementsByTagName('input')[0]; //adapt input apply.
+						input.setAttribute('data-id-section', s);
+						
+						code = codeStr[s]
+							.replace(/(^\n|\n$)/g, '') //sanitise start and end.
+							.replace(/	/g, '  '); //replace indentation.
+						let codeRows = code.split(/\n/g).length;
+						
+						textarea.innerHTML = code;
+						textarea.setAttribute('rows', codeRows);
+						textarea.setAttribute('spellcheck', 'false');
+						
+						eval(code); //execute code.
+					
+						let canvas = sections[s].getElementsByTagName('canvas')[0]; //draw on canvas.
+						canvas.setAttribute('width', canvasWidth);
+						canvas.setAttribute('height', canvasHeight);
+						let c2d = canvas.getContext('2d');
+						drawCanvas(c2d, lasers, walls, collideFound || null);
+						
+						let heightCanvas = canvas.getBoundingClientRect().height; //resize textarea height base on canvas height.
+						textarea.setAttribute('rows', (heightCanvas / 15));
+						
+					}else{
+					
+						code = textarea.value
+							.replace(/&lt;/g, '<')
+							.replace(/&amp;/g, '&');
+					
+						eval(code); //execute code.
+						
+						if(!autoUpdate) //skip if not auto update.
+							continue;
+					
+						let canvas = sections[s].getElementsByTagName('canvas')[0]; //draw on canvas.
+						let c2d = canvas.getContext('2d');
+						drawCanvas(c2d, lasers, walls, collideFound || null);
+					
+					}
+					
+				}
+				
+			}
+			
+			function drawCanvas(c2d, lasers, walls, collideFound=null){
+				c2d.clearRect( //clean canvas.
+					0, 0,
+					canvasWidth, canvasHeight
+				);
+				
+				let canvasCenter = { //center of canvas.
+					x: canvasWidth/2, 
+					y: canvasHeight/2
+				};
+			
+				let drawLine = function(c2d, line, canvasCenter){
+					
+					c2d.beginPath(); //draw a line.
+					c2d.strokeStyle = line.color;
+					c2d.moveTo(
+						line.posStart.x + canvasCenter.x, 
+						line.posStart.y + canvasCenter.y
+					);
+					c2d.lineTo(
+						line.posEnd.x + canvasCenter.x, 
+						line.posEnd.y + canvasCenter.y
+					);
+					c2d.stroke();
+					
+				}
+				
+				let drawCircle = function(c2d, pos, canvasCenter){
+				
+					c2d.beginPath(); //draw circle
+					c2d.strokeStyle = 'red';
+					c2d.arc(
+						pos.x + canvasCenter.x,
+						pos.y + canvasCenter.y, 
+						10,
+						0,
+						2 * Math.PI
+					);
+					c2d.stroke();
+					
+				}
+				
+				drawCircle(c2d, lasers[0].posStart, canvasCenter); //draw laser start.
+				
+				if(collideFound != null) //draw colide if found one.
+					drawCircle(c2d, collideFound, canvasCenter);
+				
+				
+				for(let i=0; i<lasers.length; i++)
+					drawLine(c2d, lasers[i], canvasCenter);
+				for(let i=0; i<walls.length; i++)
+					drawLine(c2d, walls[i], canvasCenter);
+			}
+			
+			function apply(input) {
+				let s = input.getAttribute('data-id-section'); //get id.
+				let sections = document.getElementsByTagName('section'); //get section.
+				
+				for(let i=0; i<=s; i++){ //loop on section from zero to selected.
+					let textarea = sections[i].getElementsByTagName('textarea')[0];
+					let code = textarea.value
+						.replace(/&lt;/g, '<')
+						.replace(/&amp;/g, '&');
+					eval(code); //execute textarea contend.
+					
+					let canvas = sections[i].getElementsByTagName('canvas')[0]; //re-draw canvas.
+					let c2d = canvas.getContext('2d');
+					drawCanvas(c2d, lasers, walls, collideFound || null);
+				}
+					
+			}
+			
+			const codeStr = [
+`
+var Vector = {
+	init: function(x, y) { return {x:x, y:y}; },
+	initLine: function(posStart, posEnd, color) { return {
+		posStart: posStart,
+		posEnd: posEnd,
+		color: color
+	}; },
+	findEndPosLaser: function(pos, direction, length) {
+		let directionLength = Math.sqrt( //get length direction.
+			Math.pow(direction.x, 2) + 
+			Math.pow(direction.y, 2)
+		);
+		let multiplyDirection = length / directionLength;
+		return Vector.init(
+			pos.x + direction.x * multiplyDirection,
+			pos.y + direction.y * multiplyDirection
+		);
+	},
+};
+
+var laser = { //laser params start.
+	pos: Vector.init(0, 0), //position start line.
+	direction: Vector.init(0, -1), //direction (laser look up).
+	length: 350, //distance max of laser.
+};
+
+var lasers = []; //array of laser and his futur rebonds.
+var walls = []; //array of walls.
+var collideFound = null; //if want to draw one collide.
+
+lasers.push(Vector.initLine( //cast laser in line (pos start/end).
+	laser.pos, //position start laser (center canvas).
+	Vector.findEndPosLaser( //find the end pos of laser.
+		laser.pos, 
+		laser.direction, 
+		laser.length
+	),
+	'red' //color of laser.
+));
+`,`
+Vector.rotateAVector = function(vect, rotateDegree){
+	let rotateEuler = ((rotateDegree /180) *Math.PI); //cast.
+	return Vector.init( //rotate.
+        Math.cos(rotateEuler) * vect.x + (-Math.sin(rotateEuler)) * vect.y,
+        Math.sin(rotateEuler) * vect.x + Math.cos(rotateEuler) * vect.y
+	);
+}
+
+let speedRotate = Date.now(); //get time.
+speedRotate *= 0.05; //make more slow.
+speedRotate %= 360; //clamp in angle range.
+
+laser.direction = Vector.rotateAVector( //rotate the direction.
+	laser.direction,
+	speedRotate
+);
+
+lasers = []; //adapt laser rotate in lasers array.
+lasers.push(Vector.initLine(
+	laser.pos,
+	Vector.findEndPosLaser(
+		laser.pos, 
+		laser.direction, 
+		laser.length
+	),
+	'red'
+));
+`,`
+walls = [
+	Vector.initLine( //wall 1.
+		Vector.init(100, 20),
+		Vector.init(60, 50),
+		'blue'
+	), //wall 2.
+	Vector.initLine(
+		Vector.init(-50, -30),
+		Vector.init(-80, -20),
+		'blue'
+	), //wall 3.
+	Vector.initLine(
+		Vector.init(40, -60),
+		Vector.init(80, -40),
+		'blue'
+	), //wall 4.
+	Vector.initLine(
+		Vector.init(-120, 20),
+		Vector.init(-140, 60),
+		'blue'
+	)
+];
+`,`
+Vector.dist = function(posOne, posTwo){ //dist between two pos.
+	return Math.sqrt(
+		Math.pow(posOne.x - posTwo.x, 2),
+		Math.pow(posOne.y - posTwo.y, 2),
+	);
+};
+Vector.findIntersection = function(lineOne, lineTwo) {
+	
+	let lineTwoEndBis = Vector.init(
+		lineTwo.posStart.x - 2*(lineTwo.posEnd.x - lineTwo.posStart.x),
+        lineTwo.posStart.y - 2*(lineTwo.posEnd.y - lineTwo.posStart.y)
+	);
+    
+    let den = ( //if line paralèle.
+		(lineOne.posStart.x - lineOne.posEnd.x) *
+		(lineTwo.posStart.y - lineTwoEndBis.y) - 
+		(lineOne.posStart.y - lineOne.posEnd.y) * 
+		(lineTwo.posStart.x - lineTwoEndBis.x)
+	);
+    if(den == 0)
+      return null;
+    
+    let t = (
+		(lineOne.posStart.x - lineTwo.posStart.x) * 
+		(lineTwo.posStart.y - lineTwoEndBis.y) - 
+		(lineOne.posStart.y - lineTwo.posStart.y) * 
+		(lineTwo.posStart.x - lineTwoEndBis.x)
+	) /den;
+    let u = -(
+		(lineOne.posEnd.x - lineOne.posStart.x) * 
+		(lineOne.posStart.y - lineTwo.posStart.y) - 
+		(lineOne.posEnd.y - lineOne.posStart.y) * 
+		(lineOne.posStart.x - lineTwo.posStart.x)
+	) /den;
+    
+    //dont colide.
+    if(t<0 || t>1 || u<0 || u>1)
+      return null;
+    
+    //vérifie le dépacement des limite du miroire.
+    let limite = Vector.init(
+		lineTwo.posStart.x + u*(lineTwoEndBis.x - lineTwo.posStart.x),
+        lineTwo.posStart.y + u*(lineTwoEndBis.y - lineTwo.posStart.y)
+	);
+    if(Vector.dist(lineTwo.posStart, lineTwo.posEnd) < Vector.dist(lineTwo.posStart, limite))
+      return null;
+    
+	let out = Vector.init(
+	    Math.round(lineOne.posStart.x + t*(lineOne.posEnd.x - lineOne.posStart.x)),
+        Math.round(lineOne.posStart.y + t*(lineOne.posEnd.y - lineOne.posStart.y))
+	);
+	
+	if(Vector.dist(lineOne.posStart, out) < 3) //ignore if collid to close from start.
+	    return null;
+	
+    return out; //find an intersection.
+	
+};
+
+collideFound = null;
+for(let i=0; i<walls.length; i++){ //loop on every wall.
+	let intersFind = Vector.findIntersection(
+		lasers[0],
+		walls[i]
+	);
+	if(intersFind != null){ //find a position.
+		collideFound = intersFind;
+		break;
+	}
+}
+`,`
+Vector.atan = function(vec){
+	let out = Math.atan2(vec.x, vec.y);
+	return (out /Math.PI) *180;
+};
+Vector.normalize = function(vec){
+	let dist = Math.sqrt(
+		Math.pow(vec.x, 2) + 
+		Math.pow(vec.y, 2)
+	);
+	if(dist == 0)
+		return null;
+	return Vector.init(
+		vec.x * (1/dist),
+		vec.y * (1/dist),
+	);
+};
+
+collideFound = null; //not draw first inters.
+
+let laserLength = laser.length;
+let laserDirection = Vector.normalize(laser.direction);
+
+for(let l=0; l<lasers.length; l++){ //loop on array lasers.
+
+	let closestColideFind = null;
+	let distToFind = null;
+	let wallFind = null;
+	for(let w=0; w<walls.length; w++){ //loop on walls.
+	
+		let intersFind = Vector.findIntersection(
+			lasers[l],
+			walls[w]
+		);
+		
+		if(intersFind == null)
+			continue; //no found for this wall.
+			
+		let newDist = Vector.dist( //get dist to wall.
+			lasers[l].posStart, 
+			intersFind
+		);
+		
+		if(closestColideFind == null){
+			closestColideFind = intersFind;
+			distToFind = newDist;
+			wallFind = walls[w];
+			continue; //first find.
+		}
+		
+		if(newDist < distToFind){
+			closestColideFind = intersFind;
+			distToFind = newDist;
+			wallFind = walls[w];
+			continue;
+		} //find more close than last find.
+	
+	}
+	
+	if(closestColideFind != null){ //find, so laser bounce.
+		
+		lasers[l].posEnd = closestColideFind; //set end laser on wall.
+		
+		laserLength -= distToFind; //new laser length.
+		
+		let wallDirection = Vector.init( //direction wall (normalized).
+			wallFind.posEnd.x - wallFind.posStart.x,
+			wallFind.posEnd.y - wallFind.posStart.y
+		);
+		wallDirection = Vector.normalize(wallDirection);
+		
+		let dotProduct = ( //find direction of bounce.
+			laserDirection.x * wallDirection.x + 
+			laserDirection.y * wallDirection.y
+		);
+		let bounceDirection = Vector.init(
+			laserDirection.x - (2 * dotProduct * wallDirection.x),
+			laserDirection.y - (2 * dotProduct * wallDirection.y)
+		);
+		bounceDirection.x *= -1;
+		bounceDirection.y *= -1;
+		laserDirection = Vector.normalize(bounceDirection);
+		
+		lasers.push(Vector.initLine( //set bounce of last laser.
+			closestColideFind,
+			Vector.findEndPosLaser(
+				closestColideFind, 
+				laserDirection, 
+				laserLength
+			),
+			lasers[l].color
+		));
+		
+	}
+
+}
+`
+			];
+			
+		</script>
+	</head>
+	<body>
+		<h1>Laser Bounce (JS)</h1>
+		<section>
+			<h2>the laser</h2>
+			<div class="div-input-section">
+				<input type="button" value="apply" onclick="apply(this)"/>
+			</div>
+			<div class="flex-container">
+				<article>
+					<h3>code</h3>
+					<textarea></textarea>
+				</article>
+				<article>
+					<h3>result</h3>
+					<canvas></canvas>
+				</article>
+			</div>
+		</section>
+		<section data-auto-update="true">
+			<h2>rotate laser</h2>
+			<div class="div-input-section">
+				<input type="button" value="apply" onclick="apply(this)"/>
+			</div>
+			<div class="flex-container">
+				<article>
+					<h3>code</h3>
+					<textarea></textarea>
+				</article>
+				<article>
+					<h3>result</h3>
+					<canvas></canvas>
+				</article>
+			</div>
+		</section>
+		<section data-auto-update="true">
+			<h2>add walls</h2>
+			<div class="div-input-section">
+				<input type="button" value="apply" onclick="apply(this)"/>
+			</div>
+			<div class="flex-container">
+				<article>
+					<h3>code</h3>
+					<textarea></textarea>
+				</article>
+				<article>
+					<h3>result</h3>
+					<canvas></canvas>
+				</article>
+			</div>
+		</section>
+		<section data-auto-update="true">
+			<h2>find colision</h2>
+			<div class="div-input-section">
+				<input type="button" value="apply" onclick="apply(this)"/>
+			</div>
+			<div class="flex-container">
+				<article>
+					<h3>code</h3>
+					<textarea></textarea>
+				</article>
+				<article>
+					<h3>result</h3>
+					<canvas></canvas>
+				</article>
+			</div>
+		</section>
+		<section data-auto-update="true">
+			<h2>laser bounce</h2>
+			<div class="div-input-section">
+				<input type="button" value="apply" onclick="apply(this)"/>
+			</div>
+			<div class="flex-container">
+				<article>
+					<h3>code</h3>
+					<textarea></textarea>
+				</article>
+				<article>
+					<h3>result</h3>
+					<canvas></canvas>
+				</article>
+			</div>
+		</section>
+	</body>
+</html>
